@@ -39,7 +39,6 @@ jobs:
         run: |
           cd ios
 
-          # تثبيت أولي للمكتبات
           pod install --repo-update
 
           # تعطيل التوقيع في مشروع Xcode الرئيسي
@@ -51,7 +50,7 @@ jobs:
           sed -i '' 's/CODE_SIGNING_ALLOWED = YES/CODE_SIGNING_ALLOWED = NO/g' "$PROJECT_FILE/project.pbxproj"
           sed -i '' 's/CODE_SIGNING_REQUIRED = YES/CODE_SIGNING_REQUIRED = NO/g' "$PROJECT_FILE/project.pbxproj"
 
-          # تعديل Podfile لتعطيل التوقيع في جميع Pods
+          # تعديل Podfile لتعطيل التوقيع في جميع Pods (نفس فكرة ZEUSNovels)
           python3 -c "
           import os
           path = 'Podfile'
@@ -75,10 +74,9 @@ jobs:
                   f.write(new_content)
           "
 
-          # إعادة تثبيت Pods لتطبيق التعديلات
           pod install
 
-      - name: 🏗️ Archive unsigned iOS app
+      - name: 🏗️ Build unsigned iOS app
         run: |
           cd ios
           set -eo pipefail
@@ -86,51 +84,63 @@ jobs:
           WORKSPACE_PATH=$(find . -maxdepth 1 -name '*.xcworkspace' -print -quit)
           PROJECT_PATH=$(find . -maxdepth 1 -name '*.xcodeproj' -print -quit)
 
+          # استخراج اسم الـ scheme من اسم الـ workspace أو المشروع
           if [ -n "$WORKSPACE_PATH" ]; then
-            # استخراج اسم الـ scheme من اسم الـ workspace (مثلاً Studio من Studio.xcworkspace)
             SCHEME_NAME=$(basename "$WORKSPACE_PATH" .xcworkspace)
-            echo "🔨 Archiving workspace: $WORKSPACE_PATH, scheme: $SCHEME_NAME"
-            xcodebuild archive \
+            echo "🔨 Building workspace: $WORKSPACE_PATH, scheme: $SCHEME_NAME"
+            xcodebuild build \
               -workspace "$WORKSPACE_PATH" \
               -scheme "$SCHEME_NAME" \
               -configuration Release \
               -sdk iphoneos \
               -destination 'generic/platform=iOS' \
-              -archivePath build_output/App.xcarchive \
+              -derivedDataPath build_output \
               CODE_SIGN_IDENTITY="" \
               CODE_SIGNING_REQUIRED=NO \
               CODE_SIGNING_ALLOWED=NO \
-              SKIP_INSTALL=NO \
               AD_HOC_CODE_SIGNING_ALLOWED=YES \
-              COMPILER_INDEX_STORE_ENABLE=NO
+              COMPILER_INDEX_STORE_ENABLE=NO \
+              2>&1 | tee build_log.txt
+            EXIT_CODE=${PIPESTATUS[0]}
           else
-            # إذا لم يوجد workspace نستخدم اسم المشروع
             SCHEME_NAME=$(basename "$PROJECT_PATH" .xcodeproj)
-            echo "🔨 Archiving project: $PROJECT_PATH, scheme: $SCHEME_NAME"
-            xcodebuild archive \
+            echo "🔨 Building project: $PROJECT_PATH, scheme: $SCHEME_NAME"
+            xcodebuild build \
               -project "$PROJECT_PATH" \
               -scheme "$SCHEME_NAME" \
               -configuration Release \
               -sdk iphoneos \
               -destination 'generic/platform=iOS' \
-              -archivePath build_output/App.xcarchive \
+              -derivedDataPath build_output \
               CODE_SIGN_IDENTITY="" \
               CODE_SIGNING_REQUIRED=NO \
               CODE_SIGNING_ALLOWED=NO \
-              SKIP_INSTALL=NO \
               AD_HOC_CODE_SIGNING_ALLOWED=YES \
-              COMPILER_INDEX_STORE_ENABLE=NO
+              COMPILER_INDEX_STORE_ENABLE=NO \
+              2>&1 | tee build_log.txt
+            EXIT_CODE=${PIPESTATUS[0]}
           fi
 
-      - name: 📦 Create unsigned IPA from archive
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo ""
+            echo "❌ BUILD FAILED. Last errors from log:"
+            grep -E "error:" build_log.txt | tail -20 || true
+            echo ""
+            echo "Last 30 lines of build log:"
+            tail -n 30 build_log.txt
+            exit $EXIT_CODE
+          fi
+
+          echo "✅ Build succeeded. Searching for .app bundle..."
+
+      - name: 📦 Create unsigned IPA
         run: |
           cd ios
-          APP_PATH=$(find build_output/App.xcarchive -name "*.app" -type d | head -n 1)
+          APP_PATH=$(find build_output -name "*.app" -type d | head -n 1)
 
           if [ -z "$APP_PATH" ]; then
-            echo "❌ No .app bundle found inside archive."
-            echo "Archive contents:"
-            find build_output/App.xcarchive -maxdepth 4
+            echo "❌ App not found! Check build log above for errors."
+            find build_output -maxdepth 4 || true
             exit 1
           fi
 
