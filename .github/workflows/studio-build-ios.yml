@@ -39,7 +39,7 @@ jobs:
         run: |
           cd ios
 
-          # 1. تثبيت أولي للمكتبات (ضروري لإنشاء الـ xcworkspace)
+          # 1. تثبيت أولي للمكتبات
           pod install --repo-update
 
           # 2. تعطيل التوقيع في مشروع Xcode الرئيسي
@@ -51,7 +51,7 @@ jobs:
           sed -i '' 's/CODE_SIGNING_ALLOWED = YES/CODE_SIGNING_ALLOWED = NO/g' "$PROJECT_FILE/project.pbxproj"
           sed -i '' 's/CODE_SIGNING_REQUIRED = YES/CODE_SIGNING_REQUIRED = NO/g' "$PROJECT_FILE/project.pbxproj"
 
-          # 3. تعديل Podfile لإضافة إعدادات تعطيل التوقيع لجميع أهداف Pods
+          # 3. تعديل Podfile لتضمين إعدادات تعطيل التوقيع لجميع Pods
           python3 -c "
           import os
           path = 'Podfile'
@@ -75,10 +75,10 @@ jobs:
                   f.write(new_content)
           "
 
-          # 4. إعادة تثبيت Pods لتطبيق التعديلات على مشاريع Pods
+          # 4. إعادة تثبيت Pods لتطبيق التعديلات
           pod install
 
-      - name: 🏗️ Build unsigned iOS app
+      - name: 🏗️ Build and archive unsigned iOS app
         run: |
           cd ios
           set -eo pipefail
@@ -86,55 +86,55 @@ jobs:
           WORKSPACE_PATH=$(find . -maxdepth 1 -name '*.xcworkspace' -print -quit)
           PROJECT_PATH=$(find . -maxdepth 1 -name '*.xcodeproj' -print -quit)
           
-          # استخراج اسم الـ scheme تلقائياً (مثل "Studio")
           if [ -n "$WORKSPACE_PATH" ]; then
             SCHEME_NAME=$(xcodebuild -list -workspace "$WORKSPACE_PATH" -json | python3 -c "import sys,json; print(json.load(sys.stdin)['workspace']['schemes'][0])")
-            echo "🔨 Building workspace: $WORKSPACE_PATH, scheme: $SCHEME_NAME"
-            xcodebuild build \
+            echo "🔨 Archiving workspace: $WORKSPACE_PATH, scheme: $SCHEME_NAME"
+            xcodebuild archive \
               -workspace "$WORKSPACE_PATH" \
               -scheme "$SCHEME_NAME" \
               -configuration Release \
               -sdk iphoneos \
               -destination 'generic/platform=iOS' \
-              -derivedDataPath build_output \
+              -archivePath build_output/App.xcarchive \
               CODE_SIGN_IDENTITY="" \
               CODE_SIGNING_REQUIRED=NO \
               CODE_SIGNING_ALLOWED=NO \
+              SKIP_INSTALL=NO \
               AD_HOC_CODE_SIGNING_ALLOWED=YES \
               COMPILER_INDEX_STORE_ENABLE=NO
           else
             SCHEME_NAME=$(xcodebuild -list -project "$PROJECT_PATH" -json | python3 -c "import sys,json; print(json.load(sys.stdin)['project']['schemes'][0])")
-            echo "🔨 Building project: $PROJECT_PATH, scheme: $SCHEME_NAME"
-            xcodebuild build \
+            echo "🔨 Archiving project: $PROJECT_PATH, scheme: $SCHEME_NAME"
+            xcodebuild archive \
               -project "$PROJECT_PATH" \
               -scheme "$SCHEME_NAME" \
               -configuration Release \
               -sdk iphoneos \
               -destination 'generic/platform=iOS' \
-              -derivedDataPath build_output \
+              -archivePath build_output/App.xcarchive \
               CODE_SIGN_IDENTITY="" \
               CODE_SIGNING_REQUIRED=NO \
               CODE_SIGNING_ALLOWED=NO \
+              SKIP_INSTALL=NO \
               AD_HOC_CODE_SIGNING_ALLOWED=YES \
               COMPILER_INDEX_STORE_ENABLE=NO
           fi
 
-      - name: 📦 Create unsigned IPA
+      - name: 📦 Create unsigned IPA from archive
         run: |
           cd ios
-          APP_PATH=$(find build_output -name "*.app" -type d | head -n 1)
+          APP_PATH=$(find build_output/App.xcarchive -name "*.app" -type d | head -n 1)
 
           if [ -z "$APP_PATH" ]; then
-            echo "❌ App not found anywhere in build_output. Full tree:"
-            find build_output
+            echo "❌ No .app bundle found inside archive."
+            echo "Archive contents:"
+            find build_output/App.xcarchive -maxdepth 4
             exit 1
           fi
 
           echo "✅ Found app at: $APP_PATH"
-          
           mkdir -p Payload
           cp -R "$APP_PATH" Payload/
-          
           zip -r studio-unsigned.ipa Payload
           echo "✅ IPA created: $(pwd)/studio-unsigned.ipa"
 
