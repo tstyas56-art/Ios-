@@ -1,5 +1,5 @@
 import React from 'react';
-import Svg, { Path, Circle, Rect, Line, G, Polyline } from 'react-native-svg';
+import Svg, { Path, Circle, Rect, Line, G, Polyline, Polygon } from 'react-native-svg';
 
 const ICON_SIZE = 24;
 const STROKE = 1.5;

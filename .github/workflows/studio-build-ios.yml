@@ -27,12 +27,16 @@ jobs:
       - name: 🛠️ Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 20
 
       - name: 📦 Install dependencies
-        run: npm install --no-audit --no-fund
+        run: |
+          npm install --no-audit --no-fund --legacy-peer-deps
+          npx expo install --fix --npm -- --no-audit --no-fund --legacy-peer-deps
 
       - name: ⚙️ Generate iOS project files
+        env:
+          CI: '1'
         run: npx expo prebuild -p ios --non-interactive
 
       - name: 🚀 Install CocoaPods & modify for unsigned build
@@ -136,7 +140,7 @@ jobs:
       - name: 📦 Create unsigned IPA
         run: |
           cd ios
-          APP_PATH=$(find build_output -name "*.app" -type d | head -n 1)
+          APP_PATH=$(find build_output/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" -type d | head -n 1)
 
           if [ -z "$APP_PATH" ]; then
             echo "❌ App not found! Check build log above for errors."

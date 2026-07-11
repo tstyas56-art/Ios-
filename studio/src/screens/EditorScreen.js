@@ -1,16 +1,9 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, StatusBar, Dimensions, Modal, TextInput,
-  ScrollView, KeyboardAvoidingView, Platform, Alert,
+  ScrollView, KeyboardAvoidingView, Platform, Alert, Image,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import Animated, {
-  useSharedValue, useAnimatedStyle, withSpring, runOnJS,
-} from 'react-native-reanimated';
-import {
-  Gesture, GestureDetector, GestureHandlerRootView,
-} from 'react-native-gesture-handler';
-import { Canvas, Text as SkiaText, useFont, Skia, Paint, Path as SkiaPath } from '@shopify/react-native-skia';
 import {
   getPageById, getLayersByPageId, getDialoguesByProjectId, getProjectById,
   createLayer, updateLayer, updateDialogue, deleteLayer,
@@ -59,33 +52,11 @@ export default function EditorScreen() {
   const [redoStack, setRedoStack] = useState([]);
   const [canvasSize, setCanvasSize] = useState({ w: SW, h: SH });
 
-  const scaleShared = useSharedValue(1);
-  const panX = useSharedValue(0);
-  const panY = useSharedValue(0);
-  const panelTranslateX = useSharedValue(SW);
-  const layersTranslateY = useSharedValue(SH);
-  const textPropsTranslateY = useSharedValue(SH);
-  const exportTranslateY = useSharedValue(SH);
 
   useEffect(() => {
     loadData();
   }, [pageId]);
 
-  useEffect(() => {
-    panelTranslateX.value = withSpring(showTranslation ? 0 : SW, { damping: 18, stiffness: 200 });
-  }, [showTranslation]);
-
-  useEffect(() => {
-    layersTranslateY.value = withSpring(showLayers ? SH * 0.4 : SH, { damping: 18, stiffness: 200 });
-  }, [showLayers]);
-
-  useEffect(() => {
-    textPropsTranslateY.value = withSpring(showTextProps ? SH - 320 : SH, { damping: 18, stiffness: 200 });
-  }, [showTextProps]);
-
-  useEffect(() => {
-    exportTranslateY.value = withSpring(showExport ? 0 : SH, { damping: 18, stiffness: 200 });
-  }, [showExport]);
 
   const loadData = async () => {
     try {
@@ -115,36 +86,6 @@ export default function EditorScreen() {
     ? `${dialogues.filter(d => d.isPlaced).length} / ${dialogues.length}`
     : '0 / 0';
 
-  const pinchingGesture = Gesture.Pinch()
-    .onUpdate((e) => {
-      scaleShared.value = Math.min(Math.max(e.scale, 0.5), 10);
-      runOnJS(setZoom)(e.scale);
-    })
-    .onEnd(() => {
-      scaleShared.value = withSpring(Math.min(Math.max(scaleShared.value, 0.5), 10));
-    });
-
-  const panningGesture = Gesture.Pan()
-    .minPointers(2)
-    .onUpdate((e) => {
-      panX.value = e.translationX;
-      panY.value = e.translationY;
-    })
-    .onEnd(() => {
-      panX.value = withSpring(0);
-      panY.value = withSpring(0);
-    });
-
-  const tapGesture = Gesture.Tap()
-    .onEnd((e) => {
-      if (placementMode && currentDialogue) {
-        runOnJS(handlePlaceText)(e.x, e.y);
-      } else if (activeTool === 'text') {
-        runOnJS(handleCreateText)(e.x, e.y);
-      }
-    });
-
-  const composedGesture = Gesture.Simultaneous(pinchingGesture, panningGesture, tapGesture);
 
   const handlePlaceText = async (x, y) => {
     if (!currentDialogue) return;
@@ -261,21 +202,6 @@ export default function EditorScreen() {
     }
   };
 
-  const panelStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: panelTranslateX.value }],
-  }));
-
-  const layersStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: layersTranslateY.value }],
-  }));
-
-  const textPropsStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: textPropsTranslateY.value }],
-  }));
-
-  const exportStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: exportTranslateY.value }],
-  }));
 
   const getToolStyle = (tool) => ({
     width: 44,
@@ -289,42 +215,65 @@ export default function EditorScreen() {
   const renderCanvas = () => {
     const textLayers = layers.filter(l => l.type === 'text' && l.visible);
     return (
-      <Canvas style={{ width: canvasSize.w, height: canvasSize.h, backgroundColor: '#111111' }}>
+      <View style={[styles.canvasPreview, { width: canvasSize.w, height: canvasSize.h }]}>
+        {page?.original_image_uri ? (
+          <Image
+            source={{ uri: page.original_image_uri }}
+            style={StyleSheet.absoluteFill}
+            resizeMode="contain"
+          />
+        ) : null}
         {textLayers.map(layer => {
           const d = layer.data;
           const px = d.x * canvasSize.w;
           const py = d.y * canvasSize.h;
           return (
-            <SkiaText
+            <Text
               key={layer.id}
-              x={px}
-              y={py}
-              text={d.content}
-              color={Skia.Color(`rgba(255,255,255,${d.opacity || 1})`)}
-              font={null}
-            />
+              style={[
+                styles.canvasTextLayer,
+                {
+                  left: px,
+                  top: py,
+                  fontSize: d.fontSize || 24,
+                  opacity: d.opacity || 1,
+                  textAlign: d.alignment || 'center',
+                },
+              ]}
+            >
+              {d.content}
+            </Text>
           );
         })}
-      </Canvas>
+      </View>
     );
   };
 
   return (
-    <GestureHandlerRootView style={styles.container}>
+    <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#080808" hidden={focusMode} />
 
       <View style={styles.canvasWrap}>
-        <GestureDetector gesture={composedGesture}>
-          <Animated.View style={[styles.canvasContainer, {
+        <View
+          style={[styles.canvasContainer, {
             transform: [
               { scale: zoom },
               { translateX: pan.x },
               { translateY: pan.y },
             ],
-          }]}>
-            {renderCanvas()}
-          </Animated.View>
-        </GestureDetector>
+          }]}
+          onStartShouldSetResponder={() => true}
+          onResponderRelease={(event) => {
+            const { locationX, locationY } = event.nativeEvent;
+            if (placementMode && currentDialogue) {
+              handlePlaceText(locationX, locationY);
+            } else if (activeTool === 'text') {
+              handleCreateText(locationX, locationY);
+            }
+          }}
+        >
+          {renderCanvas()}
+        </View>
       </View>
 
       {!focusMode && (
@@ -392,7 +341,7 @@ export default function EditorScreen() {
         </View>
       )}
 
-      <Animated.View style={[styles.translationPanel, panelStyle]}>
+      <View style={[styles.translationPanel, { transform: [{ translateX: showTranslation ? 0 : SW }] }]}>
         <View style={styles.transHeader}>
           <Text style={styles.transTitle}>الترجمة</Text>
           <View style={styles.transProgress}>
@@ -441,9 +390,9 @@ export default function EditorScreen() {
             </TouchableOpacity>
           ))}
         </ScrollView>
-      </Animated.View>
+      </View>
 
-      <Animated.View style={[styles.layersPanel, layersStyle]}>
+      <View style={[styles.layersPanel, { transform: [{ translateY: showLayers ? SH * 0.4 : SH }] }]}>
         <View style={styles.layersHeader}>
           <Text style={styles.layersTitle}>الطبقات</Text>
           <TouchableOpacity onPress={() => setShowLayers(false)}>
@@ -476,9 +425,9 @@ export default function EditorScreen() {
             </View>
           ))}
         </ScrollView>
-      </Animated.View>
+      </View>
 
-      <Animated.View style={[styles.textPropsPanel, textPropsStyle]}>
+      <View style={[styles.textPropsPanel, { transform: [{ translateY: showTextProps ? SH - 320 : SH }] }]}>
         <View style={styles.textPropsHeader}>
           <Text style={styles.textPropsTitle}>خصائص النص</Text>
           <TouchableOpacity onPress={() => setShowTextProps(false)}>
@@ -535,9 +484,9 @@ export default function EditorScreen() {
             </TouchableOpacity>
           </View>
         </ScrollView>
-      </Animated.View>
+      </View>
 
-      <Animated.View style={[styles.exportPanel, exportStyle]}>
+      <View style={[styles.exportPanel, { transform: [{ translateY: showExport ? 0 : SH }] }]}>
         <View style={styles.exportHeader}>
           <Text style={styles.exportTitle}>تصدير</Text>
           <TouchableOpacity onPress={() => setShowExport(false)}>
@@ -570,8 +519,8 @@ export default function EditorScreen() {
             <Text style={styles.exportBtnText}>تصدير الصفحة</Text>
           </TouchableOpacity>
         </ScrollView>
-      </Animated.View>
-    </GestureHandlerRootView>
+      </View>
+    </View>
   );
 }
 
@@ -579,6 +528,15 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#080808' },
   canvasWrap: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   canvasContainer: { backgroundColor: '#111111' },
+  canvasPreview: { backgroundColor: '#111111', overflow: 'hidden' },
+  canvasTextLayer: {
+    position: 'absolute',
+    color: '#FFFFFF',
+    fontWeight: '700',
+    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+  },
 
   topBar: {
     position: 'absolute',
