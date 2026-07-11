@@ -1,0 +1,42 @@
+name: Studio Preview Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: 'Target platform for export'
+        required: true
+        default: 'web'
+        type: choice
+        options:
+          - web
+          - ios
+
+jobs:
+  export:
+    name: Export Expo bundle
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: studio
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Export app bundle
+        run: npx expo export --platform ${{ github.event.inputs.platform }} --output-dir dist --non-interactive
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: studio-${{ github.event.inputs.platform }}-bundle
+          path: studio/dist

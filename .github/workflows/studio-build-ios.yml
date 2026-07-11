@@ -1,0 +1,109 @@
+name: Build Studio unsigned IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'studio/**'
+      - '.github/workflows/studio-build-ios.yml'
+  pull_request:
+    paths:
+      - 'studio/**'
+      - '.github/workflows/studio-build-ios.yml'
+
+jobs:
+  build:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: studio
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Generate iOS project files
+        run: npx expo prebuild -p ios --non-interactive
+
+      - name: Install CocoaPods dependencies
+        run: |
+          cd ios
+          pod install --repo-update
+
+      - name: Disable code signing for Xcode build
+        run: |
+          cd ios
+          PROJECT_FILE=$(find . -maxdepth 1 -name '*.xcodeproj' -print -quit)
+          if [ -z "$PROJECT_FILE" ]; then
+            echo 'No Xcode project generated.'
+            exit 1
+          fi
+
+          sed -i '' 's/CODE_SIGNING_ALLOWED = YES/CODE_SIGNING_ALLOWED = NO/g' "$PROJECT_FILE/project.pbxproj"
+          sed -i '' 's/CODE_SIGNING_REQUIRED = YES/CODE_SIGNING_REQUIRED = NO/g' "$PROJECT_FILE/project.pbxproj"
+
+      - name: Build unsigned iOS app
+        run: |
+          cd ios
+          WORKSPACE_PATH=$(find . -maxdepth 1 -name '*.xcworkspace' -print -quit)
+          PROJECT_PATH=$(find . -maxdepth 1 -name '*.xcodeproj' -print -quit)
+          SCHEME_NAME="studio"
+
+          if [ -n "$WORKSPACE_PATH" ]; then
+            xcodebuild build \
+              -workspace "$WORKSPACE_PATH" \
+              -scheme "$SCHEME_NAME" \
+              -configuration Release \
+              -sdk iphoneos \
+              -destination 'generic/platform=iOS' \
+              -derivedDataPath build_output \
+              CODE_SIGN_IDENTITY='' \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGNING_ALLOWED=NO \
+              AD_HOC_CODE_SIGNING_ALLOWED=YES \
+              COMPILER_INDEX_STORE_ENABLE=NO
+          else
+            xcodebuild build \
+              -project "$PROJECT_PATH" \
+              -scheme "$SCHEME_NAME" \
+              -configuration Release \
+              -sdk iphoneos \
+              -destination 'generic/platform=iOS' \
+              -derivedDataPath build_output \
+              CODE_SIGN_IDENTITY='' \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGNING_ALLOWED=NO \
+              AD_HOC_CODE_SIGNING_ALLOWED=YES \
+              COMPILER_INDEX_STORE_ENABLE=NO
+          fi
+
+      - name: Create unsigned IPA
+        run: |
+          cd ios
+          APP_PATH="$(find build_output -type d -name '*.app' | head -n 1)"
+
+          if [ -z "$APP_PATH" ]; then
+            echo 'No .app bundle was produced.'
+            find build_output -maxdepth 4 || true
+            exit 1
+          fi
+
+          mkdir -p Payload
+          cp -R "$APP_PATH" Payload/
+          zip -r studio-unsigned.ipa Payload
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: studio-unsigned-ipa
+          path: studio/ios/*.ipa

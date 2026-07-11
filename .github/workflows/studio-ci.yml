@@ -1,0 +1,40 @@
+name: Studio CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'studio/**'
+      - '.github/workflows/studio-ci.yml'
+  pull_request:
+    paths:
+      - 'studio/**'
+      - '.github/workflows/studio-ci.yml'
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: Validate Expo app
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: studio
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Check Expo configuration
+        run: npx expo config --type public
+
+      - name: Run Expo doctor
+        run: npx expo doctor
