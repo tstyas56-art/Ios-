@@ -57,9 +57,10 @@ jobs:
           cd ios
           WORKSPACE_PATH=$(find . -maxdepth 1 -name '*.xcworkspace' -print -quit)
           PROJECT_PATH=$(find . -maxdepth 1 -name '*.xcodeproj' -print -quit)
-          SCHEME_NAME="studio"
 
           if [ -n "$WORKSPACE_PATH" ]; then
+            SCHEME_NAME=$(xcodebuild -list -workspace "$WORKSPACE_PATH" -json | python3 -c "import sys,json; print(json.load(sys.stdin)['workspace']['schemes'][0])")
+            echo "Using workspace: $WORKSPACE_PATH with scheme: $SCHEME_NAME"
             xcodebuild build \
               -workspace "$WORKSPACE_PATH" \
               -scheme "$SCHEME_NAME" \
@@ -73,6 +74,8 @@ jobs:
               AD_HOC_CODE_SIGNING_ALLOWED=YES \
               COMPILER_INDEX_STORE_ENABLE=NO
           else
+            SCHEME_NAME=$(xcodebuild -list -project "$PROJECT_PATH" -json | python3 -c "import sys,json; print(json.load(sys.stdin)['project']['schemes'][0])")
+            echo "Using project: $PROJECT_PATH with scheme: $SCHEME_NAME"
             xcodebuild build \
               -project "$PROJECT_PATH" \
               -scheme "$SCHEME_NAME" \
