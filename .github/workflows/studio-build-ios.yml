@@ -21,115 +21,124 @@ jobs:
         working-directory: studio
 
     steps:
-      - name: Checkout
+      - name: 📥 Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: 🛠️ Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      - name: Install dependencies
+      - name: 📦 Install dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Generate iOS project files
+      - name: ⚙️ Generate iOS project files
         run: npx expo prebuild -p ios --non-interactive
 
-      - name: Install CocoaPods dependencies
+      - name: 🚀 Install CocoaPods & modify for unsigned build
         run: |
           cd ios
+
+          # 1. تثبيت أولي للمكتبات (ضروري لإنشاء الـ xcworkspace)
           pod install --repo-update
 
-      - name: Fix SKIP_INSTALL setting
-        run: |
-          cd ios
+          # 2. تعطيل التوقيع في مشروع Xcode الرئيسي
           PROJECT_FILE=$(find . -maxdepth 1 -name '*.xcodeproj' -print -quit)
           if [ -z "$PROJECT_FILE" ]; then
             echo 'No Xcode project generated.'
             exit 1
           fi
-          sed -i '' 's/SKIP_INSTALL = YES/SKIP_INSTALL = NO/g' "$PROJECT_FILE/project.pbxproj"
-
-      - name: Disable code signing for Xcode build
-        run: |
-          cd ios
-          PROJECT_FILE=$(find . -maxdepth 1 -name '*.xcodeproj' -print -quit)
           sed -i '' 's/CODE_SIGNING_ALLOWED = YES/CODE_SIGNING_ALLOWED = NO/g' "$PROJECT_FILE/project.pbxproj"
           sed -i '' 's/CODE_SIGNING_REQUIRED = YES/CODE_SIGNING_REQUIRED = NO/g' "$PROJECT_FILE/project.pbxproj"
 
-      - name: Build unsigned iOS app (archive)
+          # 3. تعديل Podfile لإضافة إعدادات تعطيل التوقيع لجميع أهداف Pods
+          python3 -c "
+          import os
+          path = 'Podfile'
+          with open(path, 'r') as f:
+              content = f.read()
+          
+          fix_code = '''
+                installer.pods_project.targets.each do |target|
+                  target.build_configurations.each do |config|
+                    config.build_settings['GCC_OPTIMIZATION_LEVEL'] = '0'
+                    config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
+                    config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
+                    config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
+                    config.build_settings['ENABLE_BITCODE'] = 'NO'
+                  end
+                end
+          '''
+          if 'post_install do |installer|' in content:
+              new_content = content.replace('post_install do |installer|', 'post_install do |installer|' + fix_code)
+              with open(path, 'w') as f:
+                  f.write(new_content)
+          "
+
+          # 4. إعادة تثبيت Pods لتطبيق التعديلات على مشاريع Pods
+          pod install
+
+      - name: 🏗️ Build unsigned iOS app
         run: |
           cd ios
-          set -o pipefail
+          set -eo pipefail
 
           WORKSPACE_PATH=$(find . -maxdepth 1 -name '*.xcworkspace' -print -quit)
           PROJECT_PATH=$(find . -maxdepth 1 -name '*.xcodeproj' -print -quit)
-
+          
+          # استخراج اسم الـ scheme تلقائياً (مثل "Studio")
           if [ -n "$WORKSPACE_PATH" ]; then
             SCHEME_NAME=$(xcodebuild -list -workspace "$WORKSPACE_PATH" -json | python3 -c "import sys,json; print(json.load(sys.stdin)['workspace']['schemes'][0])")
-            echo "🔨 Archiving workspace: $WORKSPACE_PATH, scheme: $SCHEME_NAME"
-            xcodebuild archive \
+            echo "🔨 Building workspace: $WORKSPACE_PATH, scheme: $SCHEME_NAME"
+            xcodebuild build \
               -workspace "$WORKSPACE_PATH" \
               -scheme "$SCHEME_NAME" \
               -configuration Release \
               -sdk iphoneos \
               -destination 'generic/platform=iOS' \
-              -archivePath build_output/App.xcarchive \
+              -derivedDataPath build_output \
               CODE_SIGN_IDENTITY="" \
               CODE_SIGNING_REQUIRED=NO \
               CODE_SIGNING_ALLOWED=NO \
-              SKIP_INSTALL=NO \
               AD_HOC_CODE_SIGNING_ALLOWED=YES \
-              COMPILER_INDEX_STORE_ENABLE=NO \
-              2>&1 | tee build_log.txt
-            EXIT_CODE=${PIPESTATUS[0]}
+              COMPILER_INDEX_STORE_ENABLE=NO
           else
             SCHEME_NAME=$(xcodebuild -list -project "$PROJECT_PATH" -json | python3 -c "import sys,json; print(json.load(sys.stdin)['project']['schemes'][0])")
-            echo "🔨 Archiving project: $PROJECT_PATH, scheme: $SCHEME_NAME"
-            xcodebuild archive \
+            echo "🔨 Building project: $PROJECT_PATH, scheme: $SCHEME_NAME"
+            xcodebuild build \
               -project "$PROJECT_PATH" \
               -scheme "$SCHEME_NAME" \
               -configuration Release \
               -sdk iphoneos \
               -destination 'generic/platform=iOS' \
-              -archivePath build_output/App.xcarchive \
+              -derivedDataPath build_output \
               CODE_SIGN_IDENTITY="" \
               CODE_SIGNING_REQUIRED=NO \
               CODE_SIGNING_ALLOWED=NO \
-              SKIP_INSTALL=NO \
               AD_HOC_CODE_SIGNING_ALLOWED=YES \
-              COMPILER_INDEX_STORE_ENABLE=NO \
-              2>&1 | tee build_log.txt
-            EXIT_CODE=${PIPESTATUS[0]}
+              COMPILER_INDEX_STORE_ENABLE=NO
           fi
 
-          if [ $EXIT_CODE -ne 0 ]; then
-            echo "❌ BUILD FAILED. Last errors:"
-            grep -E "error:|BUILD FAILED" build_log.txt | tail -30
-            exit $EXIT_CODE
-          fi
-          echo "✅ Archive created successfully."
-
-      - name: Create unsigned IPA
+      - name: 📦 Create unsigned IPA
         run: |
-          set -eo pipefail
           cd ios
-          APP_PATH=$(find build_output/App.xcarchive -name '*.app' | head -n 1)
+          APP_PATH=$(find build_output -name "*.app" -type d | head -n 1)
 
           if [ -z "$APP_PATH" ]; then
-            echo "❌ No .app bundle found in archive."
-            echo "Archive contents:"
-            find build_output/App.xcarchive -maxdepth 3 || true
+            echo "❌ App not found anywhere in build_output. Full tree:"
+            find build_output
             exit 1
           fi
 
-          echo "📦 Found app: $APP_PATH"
+          echo "✅ Found app at: $APP_PATH"
+          
           mkdir -p Payload
           cp -R "$APP_PATH" Payload/
+          
           zip -r studio-unsigned.ipa Payload
-          echo "✅ IPA created: studio-unsigned.ipa"
+          echo "✅ IPA created: $(pwd)/studio-unsigned.ipa"
 
-      - name: Upload IPA artifact
+      - name: ⬆️ Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
           name: studio-unsigned-ipa
