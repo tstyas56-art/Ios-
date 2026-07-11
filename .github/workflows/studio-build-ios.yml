@@ -39,10 +39,10 @@ jobs:
         run: |
           cd ios
 
-          # 1. تثبيت أولي للمكتبات
+          # تثبيت أولي للمكتبات
           pod install --repo-update
 
-          # 2. تعطيل التوقيع في مشروع Xcode الرئيسي
+          # تعطيل التوقيع في مشروع Xcode الرئيسي
           PROJECT_FILE=$(find . -maxdepth 1 -name '*.xcodeproj' -print -quit)
           if [ -z "$PROJECT_FILE" ]; then
             echo 'No Xcode project generated.'
@@ -51,7 +51,7 @@ jobs:
           sed -i '' 's/CODE_SIGNING_ALLOWED = YES/CODE_SIGNING_ALLOWED = NO/g' "$PROJECT_FILE/project.pbxproj"
           sed -i '' 's/CODE_SIGNING_REQUIRED = YES/CODE_SIGNING_REQUIRED = NO/g' "$PROJECT_FILE/project.pbxproj"
 
-          # 3. تعديل Podfile لتضمين إعدادات تعطيل التوقيع لجميع Pods
+          # تعديل Podfile لتعطيل التوقيع في جميع Pods
           python3 -c "
           import os
           path = 'Podfile'
@@ -75,19 +75,20 @@ jobs:
                   f.write(new_content)
           "
 
-          # 4. إعادة تثبيت Pods لتطبيق التعديلات
+          # إعادة تثبيت Pods لتطبيق التعديلات
           pod install
 
-      - name: 🏗️ Build and archive unsigned iOS app
+      - name: 🏗️ Archive unsigned iOS app
         run: |
           cd ios
           set -eo pipefail
 
           WORKSPACE_PATH=$(find . -maxdepth 1 -name '*.xcworkspace' -print -quit)
           PROJECT_PATH=$(find . -maxdepth 1 -name '*.xcodeproj' -print -quit)
-          
+
           if [ -n "$WORKSPACE_PATH" ]; then
-            SCHEME_NAME=$(xcodebuild -list -workspace "$WORKSPACE_PATH" -json | python3 -c "import sys,json; print(json.load(sys.stdin)['workspace']['schemes'][0])")
+            # استخراج اسم الـ scheme من اسم الـ workspace (مثلاً Studio من Studio.xcworkspace)
+            SCHEME_NAME=$(basename "$WORKSPACE_PATH" .xcworkspace)
             echo "🔨 Archiving workspace: $WORKSPACE_PATH, scheme: $SCHEME_NAME"
             xcodebuild archive \
               -workspace "$WORKSPACE_PATH" \
@@ -103,7 +104,8 @@ jobs:
               AD_HOC_CODE_SIGNING_ALLOWED=YES \
               COMPILER_INDEX_STORE_ENABLE=NO
           else
-            SCHEME_NAME=$(xcodebuild -list -project "$PROJECT_PATH" -json | python3 -c "import sys,json; print(json.load(sys.stdin)['project']['schemes'][0])")
+            # إذا لم يوجد workspace نستخدم اسم المشروع
+            SCHEME_NAME=$(basename "$PROJECT_PATH" .xcodeproj)
             echo "🔨 Archiving project: $PROJECT_PATH, scheme: $SCHEME_NAME"
             xcodebuild archive \
               -project "$PROJECT_PATH" \
