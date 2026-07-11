@@ -6,7 +6,7 @@
 
 - Node.js 18+
 - Expo CLI
-- EAS CLI (لبناء التطبيق مع Skia)
+- EAS CLI (اختياري للبناء السحابي)
 
 ## التثبيت
 
@@ -18,7 +18,7 @@ npx expo prebuild
 
 ## التشغيل
 
-### باستخدام EAS Build (موصى به — يدعم Skia بالكامل)
+### باستخدام EAS Build أو بناء محلي
 
 ```bash
 eas build --profile development --platform ios
@@ -28,9 +28,7 @@ npx expo run:ios
 
 ### ملاحظة هامة
 
-هذا التطبيق يستخدم **React Native Skia** للرسم على Canvas. Skia **لا تعمل** على Expo Go وتحتاج إلى:
-- Development Build باستخدام `npx expo run:ios` أو `eas build`
-- أو استخدام `npx expo start --dev-client`
+نسخة Studio الحالية تتجنب الاعتماد على وحدات Native اختيارية للرسم عند بدء التشغيل، حتى لا ينهار التطبيق إذا كان الـ IPA مبنياً أو موقّعاً بطريقة لا تضمّن تلك الوحدات بشكل صحيح.
 
 ## الهيكل
 

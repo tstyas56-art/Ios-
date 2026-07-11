@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, StatusBar, Dimensions, Modal, TextInput,
-  ScrollView, KeyboardAvoidingView, Platform, Alert,
+  ScrollView, KeyboardAvoidingView, Platform, Alert, Image,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import Animated, {
@@ -10,7 +10,6 @@ import Animated, {
 import {
   Gesture, GestureDetector, GestureHandlerRootView,
 } from 'react-native-gesture-handler';
-import { Canvas, Text as SkiaText, useFont, Skia, Paint, Path as SkiaPath } from '@shopify/react-native-skia';
 import {
   getPageById, getLayersByPageId, getDialoguesByProjectId, getProjectById,
   createLayer, updateLayer, updateDialogue, deleteLayer,
@@ -289,23 +288,37 @@ export default function EditorScreen() {
   const renderCanvas = () => {
     const textLayers = layers.filter(l => l.type === 'text' && l.visible);
     return (
-      <Canvas style={{ width: canvasSize.w, height: canvasSize.h, backgroundColor: '#111111' }}>
+      <View style={[styles.canvasPreview, { width: canvasSize.w, height: canvasSize.h }]}>
+        {page?.original_image_uri ? (
+          <Image
+            source={{ uri: page.original_image_uri }}
+            style={StyleSheet.absoluteFill}
+            resizeMode="contain"
+          />
+        ) : null}
         {textLayers.map(layer => {
           const d = layer.data;
           const px = d.x * canvasSize.w;
           const py = d.y * canvasSize.h;
           return (
-            <SkiaText
+            <Text
               key={layer.id}
-              x={px}
-              y={py}
-              text={d.content}
-              color={Skia.Color(`rgba(255,255,255,${d.opacity || 1})`)}
-              font={null}
-            />
+              style={[
+                styles.canvasTextLayer,
+                {
+                  left: px,
+                  top: py,
+                  fontSize: d.fontSize || 24,
+                  opacity: d.opacity || 1,
+                  textAlign: d.alignment || 'center',
+                },
+              ]}
+            >
+              {d.content}
+            </Text>
           );
         })}
-      </Canvas>
+      </View>
     );
   };
 
@@ -579,6 +592,15 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#080808' },
   canvasWrap: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   canvasContainer: { backgroundColor: '#111111' },
+  canvasPreview: { backgroundColor: '#111111', overflow: 'hidden' },
+  canvasTextLayer: {
+    position: 'absolute',
+    color: '#FFFFFF',
+    fontWeight: '700',
+    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+  },
 
   topBar: {
     position: 'absolute',
