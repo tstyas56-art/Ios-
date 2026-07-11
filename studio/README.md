@@ -1,6 +1,6 @@
 # استوديو — محرر فصول المانهوا
 
-تطبيق احترافي لترجمة وتحرير فصول المانهوا والمانجا، مبني بـ React Native + Expo.
+تطبيق احترافي لترجمة وتحرير فصول المانهوا والمانجا، مبني بـ React Native + Expo ومهيأ للعمل داخل Expo Go بدون Skia أو Reanimated أو Gesture Handler.
 
 ## المتطلبات
 
@@ -13,22 +13,21 @@
 ```bash
 cd studio
 npm install
-npx expo prebuild
+npx expo start
 ```
 
 ## التشغيل
 
-### باستخدام EAS Build أو بناء محلي
+### باستخدام Expo Go
 
 ```bash
-eas build --profile development --platform ios
-# أو
-npx expo run:ios
+npx expo start
+# ثم افتح QR داخل Expo Go
 ```
 
 ### ملاحظة هامة
 
-نسخة Studio الحالية تتجنب الاعتماد على وحدات Native اختيارية للرسم عند بدء التشغيل، حتى لا ينهار التطبيق إذا كان الـ IPA مبنياً أو موقّعاً بطريقة لا تضمّن تلك الوحدات بشكل صحيح.
+نسخة Studio الحالية تتجنب Skia وReanimated وGesture Handler حتى تعمل داخل Expo Go وتقلل مشاكل البناء الأصلي للـ iOS.
 
 ## الهيكل
 

@@ -5,7 +5,6 @@ import {
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import Animated, { FadeInUp, FadeIn } from 'react-native-reanimated';
 import { createProject, createPage, createDialogue } from '../services/database';
 import { createProjectDir, copyImageToProject, generateId } from '../services/storage';
 import { parseTranslationText } from '../services/parser';
@@ -171,7 +170,7 @@ export default function CreateChapterScreen() {
       </View>
 
       <ScrollView ref={scrollRef} style={styles.scroll} showsVerticalScrollIndicator={false}>
-        <Animated.View entering={FadeInUp.delay(100).duration(300)}>
+        <View>
           <Text style={styles.label}>اسم الفصل</Text>
           <TextInput
             style={styles.nameInput}
@@ -182,9 +181,9 @@ export default function CreateChapterScreen() {
             maxLength={100}
             textAlign="right"
           />
-        </Animated.View>
+        </View>
 
-        <Animated.View entering={FadeInUp.delay(200).duration(300)} style={{ marginTop: 32 }}>
+        <View style={{ marginTop: 32 }}>
           <Text style={styles.label}>استيراد الصفحات</Text>
           <Text style={styles.sublabel}>JPG, PNG, WEBP مدعومة</Text>
 
@@ -215,9 +214,9 @@ export default function CreateChapterScreen() {
               <Text style={styles.importCount}>{importedImages.length} صفحة مستوردة</Text>
             </View>
           )}
-        </Animated.View>
+        </View>
 
-        <Animated.View entering={FadeInUp.delay(300).duration(300)} style={{ marginTop: 32, marginBottom: 48 }}>
+        <View style={{ marginTop: 32, marginBottom: 48 }}>
           <Text style={styles.label}>الترجمة</Text>
 
           <View style={styles.tabBar}>
@@ -254,7 +253,7 @@ export default function CreateChapterScreen() {
           )}
 
           {dialogueCount > 0 && (
-            <Animated.View entering={FadeIn} style={styles.previewBox}>
+            <View style={styles.previewBox}>
               <View style={styles.previewHeader}>
                 <Text style={styles.previewCount}>{dialogueCount} حوار تم اكتشافه</Text>
                 <CheckDoneIcon size={16} color="#34C759" />
@@ -267,9 +266,9 @@ export default function CreateChapterScreen() {
               {dialogueCount > 5 && (
                 <Text style={styles.previewMore}>... و {dialogueCount - 5} أكثر</Text>
               )}
-            </Animated.View>
+            </View>
           )}
-        </Animated.View>
+        </View>
       </ScrollView>
     </View>
   );
